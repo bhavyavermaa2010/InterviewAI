@@ -1,170 +1,101 @@
-import re
-from typing import List, Optional
+# InterviewAI
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+InterviewAI is an AI-powered interview preparation and evaluation platform that helps candidates improve their interview readiness using their resume, target job description, and mock interview simulations.
 
-app = FastAPI(
-    title="InterviewAI API",
-    version="0.1.0",
-    description="Backend for the InterviewAI platform",
-)
+## Overview
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+This project combines:
 
+- Next.js frontend for the user experience
+- FastAPI backend for AI-powered analysis and interview APIs
+- Ollama + LLaMA for local LLM inference
+- PostgreSQL for interview history and user data
 
-def normalize(value: str) -> str:
-    return re.sub(r"[^a-z0-9\s]+", " ", value.lower()).strip()
+## Features
 
+- Resume upload and parsing
+- Job description analysis
+- Skill gap matching between resume and JD
+- Personalized interview question generation
+- AI mock interview flow
+- Scorecards and feedback dashboard
+- Interview history tracking
 
-class ResumeAnalysisRequest(BaseModel):
-    resume_text: str
-    job_description: str
+## Architecture
 
+- Frontend: Next.js
+- Backend: FastAPI
+- AI: Ollama + LLaMA 3
+- Database: PostgreSQL
+- Optional vector storage: pgvector / Qdrant for RAG
 
-class InterviewEvaluationRequest(BaseModel):
-    question: str
-    answer: str
+## Quick start
 
+### 1. Install backend dependencies
 
-class InterviewStartRequest(BaseModel):
-    role: Optional[str] = None
-    resume_summary: Optional[str] = None
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
 
+### 2. Start the backend
 
-@app.get("/api/health")
-def health_check() -> dict:
-    return {"status": "ok", "service": "InterviewAI API"}
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
 
+Open http://localhost:8000/docs for Swagger UI.
 
-@app.post("/api/resume/analyze")
-def analyze_resume(payload: ResumeAnalysisRequest) -> dict:
-    resume_norm = normalize(payload.resume_text)
-    jd_norm = normalize(payload.job_description)
+### 3. Run the frontend
 
-    skill_bank = [
-        "python",
-        "sql",
-        "system design",
-        "aws",
-        "react",
-        "node",
-        "javascript",
-        "java",
-        "docker",
-        "kubernetes",
-        "microservices",
-        "mongodb",
-        "postgresql",
-        "redis",
-        "fastapi",
-        "api",
-        "communication",
-        "leadership",
-    ]
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-    extracted_skills = []
-    for skill in skill_bank:
-        if skill in resume_norm or skill in jd_norm:
-            extracted_skills.append(skill)
+Open http://localhost:3000
 
-    jd_terms = set(jd_norm.split())
-    resume_terms = set(resume_norm.split())
-    common_terms = jd_terms.intersection(resume_terms)
-    match_score = min(98, max(40, round((len(common_terms) / max(len(jd_terms), 1)) * 100)))
+### 4. Optional: Local LLM with Ollama
 
-    missing_skills = [skill for skill in ["system design", "aws", "microservices", "kubernetes", "sql"] if skill in jd_norm and skill not in resume_norm]
+Install Ollama and run:
 
-    candidate_summary = {
-        "strengths": ["Problem solving", "Communication", "Project ownership"],
-        "areas_to_improve": ["System Design", "DBMS", "Leadership"],
-    }
+```bash
+ollama pull llama3
+```
 
-    if "aws" in extracted_skills and "sql" in extracted_skills:
-        candidate_summary["strengths"].append("Cloud and data handling")
+Then set your environment file:
 
-    if "leadership" in jd_norm and "leadership" not in resume_norm:
-        candidate_summary["areas_to_improve"].append("Leadership communication")
+```bash
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3
+```
 
-    return {
-        "candidate_summary": candidate_summary,
-        "extracted_skills": extracted_skills,
-        "missing_skills": missing_skills,
-        "match_score": match_score,
-    }
+## Environment setup
 
+Create a `.env` file in `backend/` with:
 
-@app.post("/api/mock-interview/start")
-def start_mock_interview(payload: Optional[InterviewStartRequest] = None) -> dict:
-    questions = [
-        "Tell me about a project you led and the impact it had.",
-        "How do you design a scalable backend for a product with growing traffic?",
-        "Walk me through how you would optimize a slow SQL query.",
-        "Describe a time when you handled ambiguity in a technical project.",
-    ]
+```env
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3
+```
 
-    if payload and payload.role:
-        role = payload.role.lower()
-        if "backend" in role:
-            questions = [
-                "Design a scalable backend architecture for a real-time product feed.",
-                "How would you improve the reliability of a service under heavy load?",
-                "Explain the trade-offs between SQL and NoSQL for a growing product.",
-            ]
+For frontend, create `.env.local` in `frontend/` with:
 
-    return {
-        "interview_id": "int_101",
-        "questions": questions,
-    }
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
 
+## Project status
 
-@app.post("/api/mock-interview/evaluate")
-def evaluate_answer(payload: InterviewEvaluationRequest) -> dict:
-    answer_norm = normalize(payload.answer)
-    question_norm = normalize(payload.question)
+This repository includes a working starter app with real resume/job analysis logic, PDF extraction hooks, and AI-assisted interview evaluation. It is designed to act as the foundation for a production-grade interview training platform.
 
-    score = 72
-    technical_accuracy = 75
-    communication = 78
-    problem_solving = 76
+## Recommended next improvements
 
-    if any(keyword in answer_norm for keyword in ["system design", "architecture", "scalability", "tradeoff", "latency", "database"]):
-        technical_accuracy += 12
-        problem_solving += 8
-
-    if any(keyword in answer_norm for keyword in ["first", "then", "because", "therefore", "finally", "example", "impact"]):
-        communication += 10
-
-    if any(keyword in answer_norm for keyword in ["monitor", "metrics", "bottleneck", "optimize", "fallback", "error handling"]):
-        problem_solving += 10
-
-    overall_score = min(98, max(55, round((technical_accuracy + communication + problem_solving) / 3)))
-
-    feedback = "Strong answer with a clear structure. Add more specific trade-offs and measurable impact to make the response stronger."
-    if "scalability" not in answer_norm and "architecture" not in answer_norm:
-        feedback = "Good foundation, but the answer would be stronger with more architecture and scaling details."
-
-    improvement_tip = "Include a clear problem statement, the trade-offs you considered, and how you validated the solution using metrics or constraints."
-
-    return {
-        "overall_score": overall_score,
-        "technical_accuracy": min(98, technical_accuracy),
-        "communication": min(98, communication),
-        "problem_solving": min(98, problem_solving),
-        "feedback": feedback,
-        "improvement_tip": improvement_tip,
-    }
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
-
+- Add PostgreSQL persistence for interviews and user profiles
+- Add authentication and account management
+- Add resume parsing from uploaded PDFs into structured fields
+- Add vector-based semantic matching with pgvector or Qdrant
+- Add multi-turn interview sessions with feedback history logs
