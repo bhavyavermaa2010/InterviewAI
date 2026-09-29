@@ -1,77 +1,135 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+"use client";
 
-app = FastAPI(
-    title="InterviewAI API",
-    version="0.1.0",
-    description="Backend for the InterviewAI platform",
-)
+import { useState } from "react";
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+const defaultQuestions = [
+  "Tell me about a project you led and the impact it had.",
+  "How do you design a scalable backend for a product with growing traffic?",
+  "Walk me through how you would optimize a slow SQL query.",
+  "Describe a time when you handled ambiguity in a technical project.",
+];
 
+export default function InterviewPage() {
+  const [questions, setQuestions] = useState(defaultQuestions);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [answer, setAnswer] = useState("");
+  const [evaluation, setEvaluation] = useState<null | {
+    overall_score: number;
+    technical_accuracy: number;
+    communication: number;
+    problem_solving: number;
+    feedback: string;
+    improvement_tip: string;
+  }>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-class ResumeAnalysisRequest(BaseModel):
-    resume_text: str
-    job_description: str
+  const handleSubmit = async () => {
+    setIsLoading(true);
 
-
-@app.get("/api/health")
-def health_check() -> dict:
-    return {"status": "ok", "service": "InterviewAI API"}
-
-
-@app.post("/api/resume/analyze")
-def analyze_resume(payload: ResumeAnalysisRequest) -> dict:
-    resume = payload.resume_text.lower()
-    jd = payload.job_description.lower()
-
-    extracted_skills = [
-        skill for skill in ["python", "sql", "system design", "aws", "react", "node.js", "java", "docker"]
-        if skill in resume or skill in jd
-    ]
-
-    missing_skills = [
-        skill for skill in ["system design", "aws", "kafka", "microservices"]
-        if skill in jd and skill not in resume
-    ]
-
-    return {
-        "candidate_summary": {
-            "strengths": ["Problem solving", "Communication", "Project ownership"],
-            "areas_to_improve": ["System Design", "DBMS", "Leadership"]
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+      const response = await fetch(`${apiUrl}/api/mock-interview/evaluate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-        "extracted_skills": extracted_skills,
-        "missing_skills": missing_skills,
-        "match_score": 82,
+        body: JSON.stringify({
+          question: questions[currentIndex],
+          answer,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to evaluate answer.");
+      }
+
+      const data = await response.json();
+      setEvaluation(data);
+    } catch (error) {
+      console.error(error);
+      setEvaluation({
+        overall_score: 0,
+        technical_accuracy: 0,
+        communication: 0,
+        problem_solving: 0,
+        feedback: "Evaluation failed. Please try again.",
+        improvement_tip: "Ensure your answer includes technical depth and a clear structure.",
+      });
+    } finally {
+      setIsLoading(false);
     }
+  };
 
+  const nextQuestion = () => {
+    setEvaluation(null);
+    setAnswer("");
+    setCurrentIndex((prev) => (prev + 1) % questions.length);
+  };
 
-@app.post("/api/mock-interview/start")
-def start_mock_interview() -> dict:
-    return {
-        "interview_id": "int_101",
-        "questions": [
-            "Tell me about a project you led and the impact it had.",
-            "How do you design a scalable backend for a product with growing traffic?",
-            "Walk me through how you would optimize a slow SQL query."
-        ]
-    }
+  return (
+    <main className="page-shell inner-page">
+      <div className="section-header">
+        <h1>AI Mock Interview</h1>
+        <a href="/" className="secondary-btn small">Home</a>
+      </div>
 
+      <section className="interview-panel">
+        <span className="eyebrow">Question {currentIndex + 1}</span>
+        <h2>{questions[currentIndex]}</h2>
 
-@app.post("/api/mock-interview/evaluate")
-def evaluate_answer() -> dict:
-    return {
-        "overall_score": 84,
-        "technical_accuracy": 86,
-        "communication": 82,
-        "problem_solving": 80,
-        "feedback": "Strong answer with good structure. Add more depth in system design trade-offs and performance considerations.",
-        "improvement_tip": "Discuss bottlenecks, scaling strategies, and fallback plans more explicitly."
-    }
+        <textarea
+          className="answer-box"
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+          placeholder="Type your answer here..."
+          rows={10}
+        />
+
+        <div className="cta-row">
+          <button className="primary-btn" type="button" onClick={handleSubmit} disabled={isLoading || !answer.trim()}>
+            {isLoading ? "Evaluating..." : "Submit Answer"}
+          </button>
+          <button className="secondary-btn" type="button" onClick={nextQuestion}>
+            Next Question
+          </button>
+        </div>
+      </section>
+
+      {evaluation ? (
+        <section className="panel">
+          <h2>Evaluation</h2>
+          <div className="metrics-grid" style={{ marginBottom: 8 }}>
+            <div className="metric-card">
+              <p>Overall</p>
+              <strong>{evaluation.overall_score}%</strong>
+            </div>
+            <div className="metric-card">
+              <p>Technical</p>
+              <strong>{evaluation.technical_accuracy}%</strong>
+            </div>
+            <div className="metric-card">
+              <p>Communication</p>
+              <strong>{evaluation.communication}%</strong>
+            </div>
+            <div className="metric-card">
+              <p>Problem Solving</p>
+              <strong>{evaluation.problem_solving}%</strong>
+            </div>
+          </div>
+          <p>{evaluation.feedback}</p>
+          <p><strong>Improvement tip:</strong> {evaluation.improvement_tip}</p>
+        </section>
+      ) : null}
+
+      <section className="panel">
+        <h2>Question Bank</h2>
+        <ul className="list compact">
+          {questions.map((question, index) => (
+            <li key={question + index}>{index + 1}. {question}</li>
+          ))}
+        </ul>
+      </section>
+    </main>
+  );
+}
+
